@@ -83,4 +83,38 @@ describe("worktrees", function()
       assert.equals("/repo/main-worktree", worktrees.match_worktree(trees, "main"))
     end)
   end)
+
+  describe("normalize_trees", function()
+    it("passes the legacy flat array through unchanged", function()
+      assert.same(sample_trees, worktrees.normalize_trees(sample_trees))
+    end)
+
+    it("flattens schema 2 items", function()
+      local decoded = {
+        schema = 2,
+        items = {
+          { branch = "main", worktree = { path = "/repo/main", main = true } },
+          { branch = "feature-auth", worktree = { path = "/repo/feature-auth" } },
+        },
+      }
+      assert.same({
+        { branch = "main", path = "/repo/main" },
+        { branch = "feature-auth", path = "/repo/feature-auth" },
+      }, worktrees.normalize_trees(decoded))
+    end)
+
+    it("keeps schema 2 branches without a worktree as path-less entries", function()
+      local decoded = { schema = 2, items = { { branch = "remote-only" } } }
+      assert.same({ { branch = "remote-only" } }, worktrees.normalize_trees(decoded))
+    end)
+
+    it("returns an empty list for non-table input", function()
+      assert.same({}, worktrees.normalize_trees(vim.NIL))
+    end)
+
+    it("resolves a schema 2 path end to end with match_worktree", function()
+      local decoded = { items = { { branch = "fix/issue-123", worktree = { path = "/repo/fix-issue-123" } } } }
+      assert.equals("/repo/fix-issue-123", worktrees.match_worktree(worktrees.normalize_trees(decoded), "fix/issue-123"))
+    end)
+  end)
 end)

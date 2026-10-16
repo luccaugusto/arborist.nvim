@@ -67,13 +67,31 @@ function M.match_worktree(trees, branch)
   return nil
 end
 
+--- Flatten decoded `wt list --format=json` output into `{ branch, path }` entries.
+--- Accepts both the legacy flat array and the schema 2 `{ items = ... }` object (wt >= 0.80).
+--- Exported for testing.
+function M.normalize_trees(decoded)
+  if type(decoded) ~= "table" then
+    return {}
+  end
+  if decoded.items == nil then
+    return decoded
+  end
+  local trees = {}
+  for _, item in ipairs(decoded.items) do
+    local wt = type(item.worktree) == "table" and item.worktree or {}
+    table.insert(trees, { branch = item.branch, path = wt.path })
+  end
+  return trees
+end
+
 function M.resolve_path(branch)
   local json = system_from_root("wt list --format=json 2>/dev/null")
-  local ok, trees = pcall(vim.json.decode, json)
-  if not ok or type(trees) ~= "table" then
+  local ok, decoded = pcall(vim.json.decode, json)
+  if not ok then
     return nil
   end
-  return M.match_worktree(trees, branch)
+  return M.match_worktree(M.normalize_trees(decoded), branch)
 end
 
 local function end_claude_session(branch)
@@ -99,7 +117,7 @@ function M.fzf_picker()
   local launcher = require("arborist.launcher")
 
   fzf.fzf_exec(
-    'wt list --format=json | jq -r \'.[] | "\\(.branch // "detached")\\t\\(.path // "-")\\t\\(.symbols // "")"\'',
+    'wt list --format=json | jq -r \'(.items? // .)[] | "\\(.branch // "detached")\\t\\(.worktree.path? // .path // "-")\\t\\(.display.symbols? // .symbols // "")"\'',
     {
       prompt = false,
       winopts = {
